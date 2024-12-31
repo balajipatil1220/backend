@@ -1,8 +1,6 @@
 const express = require('express');
 const mongoose = require('mongoose');
-
 const jwt = require('jsonwebtoken');
-
 const app = express();
 app.use(express.json());
 
@@ -83,11 +81,7 @@ const userSchema = new mongoose.Schema({
 
 const User = mongoose.model('User', userSchema);
 
-
-// Middleware for authentication
 const authenticate = (roles) => async (req, res, next) => {
-
-    
     try {
         const token = req.headers.authorization.split(' ')[1];
         
@@ -103,8 +97,6 @@ const authenticate = (roles) => async (req, res, next) => {
         return res.status(401).json({ message: 'Unauthorized' });
     }
 };
-
-// Routes
 
 // Login API
 app.post('/api/login', async (req, res) => {
@@ -135,10 +127,12 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
+
+
+
 // Admin Creation API (Only one admin for all franchises)
 app.post('/admins', authenticate(['superadmin']), async (req, res) => {
-    const { username, password, name, franchiseId } = req.body;
-    
+    const { username, password, name, franchiseId } = req.body;   
     try {
         const franchise = await Franchise.findById(franchiseId);
         if (!franchise) {
@@ -165,7 +159,7 @@ app.post('/admins', authenticate(['superadmin']), async (req, res) => {
     }
 });
 // Franchise Creation API
-app.post('/franchises', authenticate(['superadmin']), async (req, res) => {
+app.post('/franchises', authenticate(['superadmin','admin']), async (req, res) => {
     const { name, location, status, contactNumber } = req.body;
     try {
         const franchise = new Franchise({ name, location, status, contactNumber });
@@ -175,7 +169,6 @@ app.post('/franchises', authenticate(['superadmin']), async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 });
-
 // User Creation API
 app.post('/admins', authenticate(['superadmin']), async (req, res) => {
     const { username, password, name, franchiseId } = req.body;
@@ -205,11 +198,9 @@ app.post('/admins', authenticate(['superadmin']), async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 });
-
 // User Creation API (Allow multiple admins for different franchises)
 app.post('/users', authenticate(['admin', 'superadmin']), async (req, res) => {
     const { username, password, name, role, franchiseId } = req.body;
-
     try {
         const franchise = await Franchise.findById(franchiseId);
         if (!franchise) {
@@ -230,7 +221,6 @@ app.post('/users', authenticate(['admin', 'superadmin']), async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 });
-
 // Get all franchises - updated route for fetching franchises
 app.get('/franchises', authenticate(['superadmin', 'admin']), async (req, res) => {
     try {
@@ -240,7 +230,6 @@ app.get('/franchises', authenticate(['superadmin', 'admin']), async (req, res) =
         res.status(500).json({ message: error.message });
     }
 });
-
 // Admin and Franchise Update API
 app.put('/users/:id', authenticate(['admin', 'superadmin']), async (req, res) => {
     const { id } = req.params;
@@ -286,9 +275,6 @@ app.put('/users/:id', authenticate(['admin', 'superadmin']), async (req, res) =>
         res.status(500).json({ message: 'An unexpected error occurred.' });
     }
 });
-
-
-
 // Route to get franchises associated with the user (only for authenticated users)
 app.get('/franchises/associated', authenticate(['user', 'admin', 'superadmin']), async (req, res) => {
     try {
@@ -309,8 +295,6 @@ app.get('/franchises/associated', authenticate(['user', 'admin', 'superadmin']),
         res.status(500).json({ message: error.message });
     }
 });
-
-// Logout API (Clear Token)
 // Logout API (clear session)
 app.post('/api/logout', authenticate(['superadmin', 'admin', 'user']), (req, res) => {
     req.session.destroy((err) => {
@@ -321,7 +305,6 @@ app.post('/api/logout', authenticate(['superadmin', 'admin', 'user']), (req, res
         res.status(200).json({ message: 'Logged out successfully' });
     });
 });
-
 // Get all users with populated franchise details
 app.get('/users', authenticate(['admin', 'superadmin']), async (req, res) => {
     try {
@@ -331,9 +314,6 @@ app.get('/users', authenticate(['admin', 'superadmin']), async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 });
-
-
-
 // Delete Franchise API
 app.delete('/franchises/:id', authenticate(['superadmin', 'admin']), async (req, res) => {
     const { id } = req.params;
@@ -347,7 +327,6 @@ app.delete('/franchises/:id', authenticate(['superadmin', 'admin']), async (req,
         res.status(500).json({ message: error.message });
     }
 });
-
 // Update Franchise API
 app.put('/franchises/:id', authenticate(['superadmin', 'admin']), async (req, res) => {
     const { id } = req.params;
@@ -362,7 +341,6 @@ app.put('/franchises/:id', authenticate(['superadmin', 'admin']), async (req, re
         res.status(500).json({ message: error.message });
     }
 });
-
 // Delete User API
 app.delete('/users/:id', authenticate(['admin', 'superadmin']), async (req, res) => {
     const { id } = req.params;
@@ -401,7 +379,6 @@ app.delete('/users/:id', authenticate(['admin', 'superadmin']), async (req, res)
         res.status(500).json({ message: 'An unexpected error occurred.' });
     }
 });
-
 // Create Exam Data API for a Franchise
 app.post('/api/franchises/:franchiseId/exam-data', authenticate(['user', 'admin', 'superadmin']), async (req, res) => {
     const { franchiseId } = req.params; // Franchise ID from the route parameter
@@ -499,9 +476,6 @@ app.post('/api/franchises/:franchiseId/exam-data', authenticate(['user', 'admin'
         res.status(500).json({ message: error.message });
     }
 });
-
-
-
 // Update Exam Data for a Franchise
 app.put('/franchises/:franchiseId/exam-data/:examDataId', authenticate(['user', 'admin', 'superadmin']), async (req, res) => {
     const { franchiseId, examDataId } = req.params;
@@ -587,8 +561,6 @@ app.put('/franchises/:franchiseId/exam-data/:examDataId', authenticate(['user', 
         res.status(500).json({ message: error.message });
     }
 });
-
-
 // Delete Exam Data for a Franchise
 app.delete('/franchises/:franchiseId/exam-data/:examDataId', authenticate(['user', 'admin', 'superadmin']), async (req, res) => {
     const { franchiseId, examDataId } = req.params; // Franchise ID and Exam Data ID from the route parameters
@@ -638,12 +610,10 @@ app.delete('/franchises/:franchiseId/exam-data/:examDataId', authenticate(['user
     }
 });
 
-  
 app.get('/api/durationOptions', (req, res) => {
     // Your logic to fetch duration options, e.g., from a database
     res.json({ options: [90, 100, 110, 115, 120, 130, 135, 240] });
   });
-
   // Get Exam Data for Associated Franchise
   app.get('/api/exam-data', authenticate(['user', 'admin', 'superadmin']), async (req, res) => {
     try {
@@ -686,11 +656,9 @@ app.get('/api/durationOptions', (req, res) => {
     }
 });
 
-
 app.get('/api/exam/count', authenticate(['admin', 'superadmin', 'user']), async (req, res) => {
     try {
         const userId = req.user.id;
-
         // Fetch the user and their associated franchises
         const user = await User.findById(userId).populate('franchise');
         if (!user) return res.status(404).send('User not found');
@@ -770,9 +738,6 @@ app.get('/api/exam/count', authenticate(['admin', 'superadmin', 'user']), async 
         return res.status(500).send('Server error');
     }
 });
-
-
-
 
 // Start the server
 const PORT = process.env.PORT || 3001;
