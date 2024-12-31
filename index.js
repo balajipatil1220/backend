@@ -130,7 +130,7 @@ app.post('/api/login', async (req, res) => {
 
 
 
-// Admin Creation API (Only one admin for all franchises)
+// Admin Creation API 
 app.post('/admins', authenticate(['superadmin']), async (req, res) => {
     const { username, password, name, franchiseId } = req.body;   
     try {
@@ -659,78 +659,86 @@ app.get('/api/durationOptions', (req, res) => {
 app.get('/api/exam/count', authenticate(['admin', 'superadmin', 'user']), async (req, res) => {
     try {
         const userId = req.user.id;
-        // Fetch the user and their associated franchises
+        const { period } = req.query; // Capture specific date if provided
+
         const user = await User.findById(userId).populate('franchise');
         if (!user) return res.status(404).send('User not found');
 
-        // If the user is a superadmin, fetch all franchise IDs
-        const franchiseIds = user.role === 'superadmin' ? await Franchise.find().distinct('_id') : user.franchise.map(f => f._id);
+        const franchiseIds = user.role === 'superadmin' 
+            ? await Franchise.find().distinct('_id') 
+            : user.franchise.map(f => f._id);
 
-        // Get the current date (start and end of today)
         const now = new Date();
-        const startOfToday = new Date(now);
-        startOfToday.setHours(0, 0, 0, 0);
 
-        const endOfToday = new Date(now);
-        endOfToday.setHours(23, 59, 59, 999);
+        // Define boundaries for day, week, and month
+        const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0));
+        const endOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59));
 
-        // Get the start of the week and month
         const startOfWeek = new Date(startOfToday);
-        startOfWeek.setDate(startOfToday.getDate() - startOfToday.getDay());
+        startOfWeek.setUTCDate(startOfWeek.getUTCDate() - startOfWeek.getUTCDay()); // Start of the week (Sunday)
 
-        const startOfMonth = new Date(startOfToday.getFullYear(), startOfToday.getMonth(), 1);
+        const endOfWeek = new Date(startOfWeek);
+        endOfWeek.setUTCDate(endOfWeek.getUTCDate() + 6); // End of the week (Saturday)
 
-        // Fetch exam data related to those franchises
+        const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+        const endOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)); // Last day of the month
+
+        let startDate, endDate;
+        if (period) {
+            const selectedDate = new Date(period);
+            startDate = new Date(Date.UTC(selectedDate.getUTCFullYear(), selectedDate.getUTCMonth(), selectedDate.getUTCDate(), 0, 0, 0));
+            endDate = new Date(Date.UTC(selectedDate.getUTCFullYear(), selectedDate.getUTCMonth(), selectedDate.getUTCDate(), 23, 59, 59));
+        }
+
         const examData = await Franchise.aggregate([
-            { 
-                $match: { _id: { $in: franchiseIds } }
-            },
-            { 
-                $unwind: '$examData' 
-            },
-            { 
+            { $match: { _id: { $in: franchiseIds } } },
+            { $unwind: '$examData' },
+            { $match: { 'examData.date': { $exists: true, $type: 'date' } } },
+            {
                 $group: {
                     _id: null,
                     totalExams: { $sum: 1 },
                     examsByDay: {
-                        $sum: { 
+                        $sum: {
                             $cond: [
-                                { $and: [
-                                    { $gte: ["$examData.date", startOfToday] },
-                                    { $lt: ["$examData.date", endOfToday] }
-                                ] }, 1, 0 
-                            ]
-                        }
+                                { $and: [{ $gte: ["$examData.date", startDate || startOfToday] }, { $lt: ["$examData.date", endDate || endOfToday] }] },
+                                1,
+                                0,
+                            ],
+                        },
                     },
                     examsByWeek: {
-                        $sum: { 
+                        $sum: {
                             $cond: [
-                                { $gte: ["$examData.date", startOfWeek] }, 1, 0
-                            ]
-                        }
+                                { $and: [{ $gte: ["$examData.date", startOfWeek] }, { $lt: ["$examData.date", endOfWeek] }] },
+                                1,
+                                0,
+                            ],
+                        },
                     },
                     examsByMonth: {
-                        $sum: { 
+                        $sum: {
                             $cond: [
-                                { $gte: ["$examData.date", startOfMonth] }, 1, 0
-                            ]
-                        }
-                    }
-                }
-            }
+                                { $and: [{ $gte: ["$examData.date", startOfMonth] }, { $lt: ["$examData.date", endOfMonth] }] },
+                                1,
+                                0,
+                            ],
+                        },
+                    },
+                },
+            },
         ]);
 
         if (!examData || examData.length === 0) {
             return res.status(404).send('No exam data found for this user');
         }
 
-        // Return the counts for the current day, week, and month
         const data = examData[0];
         return res.status(200).json({
             totalExams: data.totalExams,
             examsByDay: data.examsByDay,
             examsByWeek: data.examsByWeek,
-            examsByMonth: data.examsByMonth
+            examsByMonth: data.examsByMonth,
         });
 
     } catch (error) {
@@ -738,6 +746,8 @@ app.get('/api/exam/count', authenticate(['admin', 'superadmin', 'user']), async 
         return res.status(500).send('Server error');
     }
 });
+
+
 
 // Start the server
 const PORT = process.env.PORT || 3001;
